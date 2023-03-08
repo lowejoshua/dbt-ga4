@@ -1,6 +1,6 @@
 {{ config(
     enabled= var('conversion_events', false) != false,
-    materialized = 'incremental',
+    materialized = 'incremental' if target.name == 'prod' else 'view',
     incremental_strategy = 'insert_overwrite',
     tags = ["incremental"],
     partition_by={
@@ -19,7 +19,14 @@ with event_counts as (
         {% for ce in var('conversion_events',[]) %}
         , countif(event_name = '{{ce}}') as {{ce}}_count
         {% endfor %}
+        {% for ce in var('conversion_values', []) %}
+            , SUM(IF(event_name = '{{ce}}', {{ce}}, 0)) as {{ce}}_value
+        {% endfor %}
     from {{ref('stg_ga4__events')}}
+
+    {% if var('conversion_values') %}
+        LEFT JOIN  {{ref("stg_ga4__derived_session_properties")}} USING (session_key)
+    {% endif %}
     group by 1,2
 )
 
